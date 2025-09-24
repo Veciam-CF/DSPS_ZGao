@@ -1,1 +1,14 @@
-The hw3 is finished by the group of Zhuoran Gao, Mathilda Nilsson, and Ally Baldelli. Each member finished each task independently first and then helped solved each others problems for this homework.
+Group Members: Ally Baldelli, Mathilda Nilsson, and Zhuoran Gao.
+
+Work Breakdow:
+
+KS_earthquakes_instructions.ipynb
+
+Data manipulation by Mathilda Nilsson
+Data exploration by Zhuoran Gao
+Data analysis (yet to be completed) by Ally Baldelli
+MBoltzmannDistribution.ipynb
+
+Current contributions are from Zhuoran Gao
+
+For earthquake, pleas see the final version, which will includes part II
