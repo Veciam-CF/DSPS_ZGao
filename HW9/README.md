@@ -5,9 +5,9 @@ could let the figure looks more concentrate on curve. Also, the new yellow bar c
 
 
 
-For the second part of HW, the plots I choose and post on slack are:
+For the second part of HW, the plots I choose and post on slack are:Bad one:
 
-Bad one:
+
 <img width="720" height="268" alt="image_720" src="https://github.com/user-attachments/assets/91afc637-ff77-4cf5-88c0-3037208923b2" />
 
 Good one:
