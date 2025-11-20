@@ -1,0 +1,652 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "accelerator": "GPU",
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/Veciam-CF/DSPS_ZGao/blob/main/HW10/DSPS2025_deepdream_ipynb\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "-PLC9SvcQgkG"
+      },
+      "source": [
+        "# DeepDreaming with TensorFlow\n",
+        "\n",
+        "# modified by FBB (@fedhere) for UD DSPS 2019 class  updated for DEPS2021 including upgrading to python3 and current version of TF\n",
+        "# updated for PUS2022\n",
+        "# updated for MLTSA 2024 USPS 2025\n",
+        "\n",
+        "### ___Alex Mordvintsev___\n",
+        "\n",
+        "This notebook produces DeepDream images from user-supplied photos using Google's pretrained Inception neural network. It can be used as a starting point for further exploration in visualizing convolutional neural networks."
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "ILvNKvMvc2n5"
+      },
+      "source": [
+        "###  Load the model graph\n",
+        "\n",
+        "The pretrained Inception network can be downloaded [here](https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip). This next cell downloads the file automatically and unpacks it locally to the Colab kernel. We can the load the contained model file  'tensorflow_inception_graph.pb' in the cell below."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "1kJuJRLiQgkg",
+        "cellView": "both"
+      },
+      "source": [
+        "!wget -nc --no-check-certificate https://storage.googleapis.com/download.tensorflow.org/models/inception5h.zip && unzip -n inception5h.zip\n",
+        "\n",
+        "from io import BytesIO\n",
+        "from IPython.display import clear_output, Image, display\n",
+        "import numpy as np\n",
+        "import PIL.Image\n",
+        "import tensorflow as tf\n",
+        "import pylab as pl\n",
+        "\n",
+        "model_fn = 'tensorflow_inception_graph.pb'\n",
+        "\n",
+        "# creating TensorFlow session and loading the model\n",
+        "graph = tf.Graph()\n",
+        "sess = tf.compat.v1.InteractiveSession(graph=graph)\n",
+        "with tf.compat.v2.io.gfile.GFile(model_fn, 'rb') as f:\n",
+        "\n",
+        "    graph_def = tf.compat.v1.GraphDef()   # -> instead of tf.GraphDef()\n",
+        "    graph_def.ParseFromString(f.read())\n",
+        "t_input = tf.compat.v1.placeholder(np.float32, name='input') # define the input tensor\n",
+        "imagenet_mean = 117.0\n",
+        "t_preprocessed = tf.expand_dims(t_input-imagenet_mean, 0)\n",
+        "tf.import_graph_def(graph_def, {'input':t_preprocessed})\n",
+        "\n",
+        "def T(layer):\n",
+        "    '''Helper for getting layer output tensor'''\n",
+        "    return graph.get_tensor_by_name(\"import/%s:0\"%layer)"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "lTpG22osZHWx"
+      },
+      "source": [
+        "make sure you are running on the GPUs - on the notebook menu go to\n",
+        "\n",
+        "Runtime\\-\\>Change Runtime type\n",
+        "\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "-yfRht8zaPCp"
+      },
+      "source": [
+        "!wget https://raw.githubusercontent.com/fedhere/FDSFE_FBianco/refs/heads/main/runtime.png"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "acFux-2iZmR4"
+      },
+      "source": [
+        "from IPython.display import Image\n",
+        "Image(filename='runtime.png')"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "dAxooHpjXmIv"
+      },
+      "source": [
+        "def showarray(a, fmt='jpeg'):\n",
+        "    #if a is > 3 axis cut the last one assuming its alpha-transparency\n",
+        "    if a.shape[-1] == 4:\n",
+        "      a = a[:,:,:3]\n",
+        "    elif len(a.shape) < 3:\n",
+        "      a = a[:,:,:,np.ones,like(a[0])]\n",
+        "    a = np.uint8(np.clip(a, 0, 255))\n",
+        "    f = BytesIO()\n",
+        "    PIL.Image.fromarray(a).save(f, fmt)\n",
+        "    display(Image(data=f.getvalue()))\n",
+        "\n"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "nISBglmCYSQ-"
+      },
+      "source": [
+        "# Task 1: Create a random noise \"image\":\n",
+        "an array of 300x300 pixels and 3 color channels (RGB). Fill it in with random noise but make sure the values are Unsigned integer 8bit type (np.unit8) and contained between 0 and 255. This is how a jpg image would be encoded in python and both pylab and this base code require this encoding for the image.  This can be achieved by generating random uniform noise (between 0 and 1) and convert it to 0-255 by multiplication, then convert the data type"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import numpy as np\n",
+        "import matplotlib.pyplot as plt\n",
+        "rnd = np.random.randint(0, 256, (300, 300, 3), dtype=np.uint8)\n"
+      ],
+      "metadata": {
+        "id": "yYLj01mgprAX"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "Bz5jGAZeXFXy"
+      },
+      "source": [
+        "#create a 300x300x3 array that contains gaussian noise only = np.randn() can be used to create the gaussian noise\n",
+        "showarray(rnd)\n",
+        "rnd.shape"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## This cell defines functions and variable that will be used by the pre-trained model. We also define a function that reshapes an image to make sure it is compatible with the input that the model needs (300x300x3 unsigned integer type)"
+      ],
+      "metadata": {
+        "id": "JGpQwn0gKI37"
+      }
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "K8Usk3m5Q1E0"
+      },
+      "source": [
+        "# These parameters let us control the strenth of the deepdream.\n",
+        "octave_n = 4\n",
+        "octave_scale = 1.4\n",
+        "iter_n = 10\n",
+        "strength = 200\n",
+        "\n",
+        "# Helper function that uses TensorFlow to resize an image\n",
+        "def resize(img, new_size):\n",
+        "    return sess.run(tf.compat.v1.image.resize_bilinear(img[np.newaxis,:], new_size))[0]\n",
+        "\n",
+        "# Apply gradients to an image in a seires of tiles\n",
+        "def calc_grad_tiled(img, t_grad, tile_size=256):\n",
+        "    '''Random shifts are applied to the image to blur tile boundaries over\n",
+        "    multiple iterations.'''\n",
+        "    h, w = img.shape[:2]\n",
+        "    sx, sy = np.random.randint(tile_size, size=2)\n",
+        "    # We randomly roll the image in x and y to avoid seams between tiles.\n",
+        "    img_shift = np.roll(np.roll(img, sx, 1), sy, 0)\n",
+        "    grad = np.zeros_like(img)\n",
+        "    for y in range(0, max(h-tile_size//2, tile_size),tile_size):\n",
+        "        for x in range(0, max(w-tile_size//2, tile_size),tile_size):\n",
+        "            sub = img_shift[y:y+tile_size,x:x+tile_size]\n",
+        "            g = sess.run(t_grad, {t_input:sub})\n",
+        "            grad[y:y+tile_size,x:x+tile_size] = g\n",
+        "    imggrad = np.roll(np.roll(grad, -sx, 1), -sy, 0)\n",
+        "    # Add the image gradient to the image and return the result\n",
+        "    return img + imggrad*(strength * 0.01 / (np.abs(imggrad).mean()+1e-7))\n",
+        "\n",
+        "# Applies deepdream at multiple scales\n",
+        "def render_deepdream(t_obj, input_img, show_steps = True):\n",
+        "    # Collapse the optimization objective to a single number (the loss)\n",
+        "    t_score = tf.reduce_mean(t_obj)\n",
+        "    # We need the gradient of the image with respect to the objective\n",
+        "    t_grad = tf.gradients(t_score, t_input)[0]\n",
+        "\n",
+        "    # split the image into a number of octaves (laplacian pyramid)\n",
+        "    img = input_img\n",
+        "    octaves = []\n",
+        "    for i in range(octave_n-1):\n",
+        "        lo = resize(img, np.int32(np.float32(img.shape[:2])/octave_scale))\n",
+        "        octaves.append(img-resize(lo, img.shape[:2]))\n",
+        "        img = lo\n",
+        "\n",
+        "    # generate details octave by octave\n",
+        "    for octave in range(octave_n):\n",
+        "        if octave>0:\n",
+        "            hi = octaves[-octave]\n",
+        "            img = resize(img, hi.shape[:2])+hi\n",
+        "        for i in range(iter_n):\n",
+        "            img = calc_grad_tiled(img, t_grad)\n",
+        "        if show_steps:\n",
+        "            clear_output()\n",
+        "            showarray(img)\n",
+        "    return img"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "mc3Ea6SrRzIB"
+      },
+      "source": [
+        "# Task 2 start a deep dream and explore!:\n",
+        "\n",
+        "Adjust the sliders to change the strength of the deep dream, and how many scales it is applied over and until you obtain a \"phsychadelic\" result that you like"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "T9ZA24auPnVt"
+      },
+      "source": [
+        "octave_n = 3 #@param {type:\"slider\", max: 10}\n",
+        "octave_scale = 1.4 #@param {type:\"number\"}\n",
+        "iter_n = 30 #@param {type:\"slider\", max: 50}\n",
+        "strength = 821 #@param {type:\"slider\", max: 1000}\n",
+        "layer = \"mixed5a\"  #@param [\"mixed3a\", \"mixed3b\", \"mixed4a\", \"mixed4c\", \"mixed5a\"]\n",
+        "\n",
+        "final = render_deepdream(tf.square(T(layer)), rnd)\n"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "JGXPm8Q2_Xch"
+      },
+      "source": [
+        " # Task 3 pull each layer:\n",
+        " look at the list of layers. In the following cells plot 6 of the relevant layers: pick layers that start with \"mixed\"  (I give you an example with a layer called `head0_bottleneck_pre_relu` and a layer called `mixed5a_pool_reduce_pre_relu`)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "TCP4J_DIMefq"
+      },
+      "source": [
+        "layers = [op.name for op in graph.get_operations() if op.type=='Conv2D' and 'import/' in op.name]\n",
+        "feature_nums = [int(graph.get_tensor_by_name(name+':0').get_shape()[-1]) for name in layers]\n",
+        "\n",
+        "print('Number of layers', len(layers))\n",
+        "print('Total number of feature channels:', sum(feature_nums))\n",
+        "\n",
+        "for layer in layers:\n",
+        "  print('Layer:', layer)"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "F99FAP-ELXiY"
+      },
+      "source": [
+        "layer = \"head0_bottleneck_pre_relu\"\n",
+        "final = render_deepdream(tf.square(T(layer)), rnd)"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "layer = \"mixed5a_pool_reduce_pre_relu\"\n",
+        "final = render_deepdream(tf.square(T(layer)), rnd)"
+      ],
+      "metadata": {
+        "id": "NAEhJGsD59wE"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "0VtHSxed2ZMP"
+      },
+      "source": [
+        "# Task 4:  Qalitatively describe\n",
+        "based on your understanding and reading, why the layers show different features and what it the \"kind\" of features extracted in the earler layers vs the later ones.\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "bNVHt2C52YMk"
+      },
+      "source": [
+        "The first plot shows many eddy, and second shows some eyes and octupus. I think the later one shows more complexity, and based on the range of each 'octupus', the later one is formed based on more broad range of original image."
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "FTA0_5cjLjKR"
+      },
+      "source": [
+        "# Task 5: Load your chosen image\n",
+        "Choose an image that you like and transform it: must be at least 600 pixels in both x and y axis and must be a color jpg  image (wont work with png I think)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "haFNb-O61wCm"
+      },
+      "source": [
+        "from google.colab import files\n",
+        "uploaded = files.upload()"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "9xXGMG3MHih-"
+      },
+      "source": [
+        "\n",
+        "if type(uploaded) is not dict: uploaded = uploaded.files  ## Deal with filedit versions\n",
+        "file_contents = uploaded[list(uploaded.keys())[0]]\n"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "NirLNFJ0Ba0H"
+      },
+      "source": [
+        "img0 = sess.run(tf.io.decode_image(file_contents))\n",
+        "showarray(img0)\n"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "aKoog_5o1XFe"
+      },
+      "source": [
+        "# Task 6: shrink it to 600 pixels along the x axis by subsampling\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "f87NRtSQKHny"
+      },
+      "source": [
+        "img0.shape"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "ljtytyDK69Kq"
+      },
+      "source": [
+        "basewidth = 600\n",
+        "img1 = img0.copy()\n",
+        "\n",
+        "if img0.shape[0] > basewidth:\n",
+        "  step = int(float(img0.shape[0] / basewidth))\n",
+        "  if img0.shape[-1] == 4:\n",
+        "    img0 = img0[:,:,:3]\n",
+        "\n",
+        "  img1 = img0.copy()\n",
+        "  img1 = img1[::step]\n",
+        "elif img0.shape[0] < basewidth:\n",
+        "  import scipy\n",
+        "  img1 = scipy.ndimage.zoom(img0, zoom=(2, 1,1), order=1)\n",
+        "\n",
+        "\n",
+        "\n"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "Y2ZDlPA-FMyI"
+      },
+      "source": [
+        "tf.io.decode_image(file_contents)"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "tY3we1cA2H1g"
+      },
+      "source": [
+        "# Task 7: Repeat step 3, DeepDream, with your image.\n",
+        "Save the layer you like. Upload tha original and modified image to the readme file of your DSPS repo\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "#your code here that produces an image with a layer you like\n",
+        "\n",
+        "layer = \"mixed5a_pool_reduce_pre_relu\"\n",
+        "final = render_deepdream(tf.square(T(layer)), img0)"
+      ],
+      "metadata": {
+        "id": "sG-kxmQFHDpa"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "fgMP-bx839TK"
+      },
+      "source": [
+        "# Task 8: Answer: Are there \"animals\" in your image? why? (there should be)\n",
+        "Yeah, I see lots of animals in my plot. For example I see many snakes, frog, mouse, etc. I think it is because I used a pre-trained network,which contains bunch of animals. The network could find features that is very similar on animals, and trans the plot to that animal."
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "2AzLO_JiS6gi"
+      },
+      "source": [
+        "### Further reading for the curious\n",
+        "\n",
+        " *   Original [DeepDream (Inceptionism) blog post](https://research.googleblog.com/2015/06/inceptionism-going-deeper-into-neural.html)\n",
+        " *   [Original DeepDream algorithm](https://github.com/google/deepdream/blob/master/dream.ipynb) with Caffe"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "K_Ab2CkOtPOq"
+      },
+      "source": [
+        "## Optional: Diving deeper into the Inception Model\n",
+        "\n",
+        "Lets look a bit deeper into the Inception Model and visualize the layers. Each layer will produce a very different result when used in deep dreaming."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "FbxQBJpzvBO7"
+      },
+      "source": [
+        "layers = [op.name for op in graph.get_operations() if op.type=='Conv2D' and 'import/' in op.name]\n",
+        "feature_nums = [int(graph.get_tensor_by_name(name+':0').get_shape()[-1]) for name in layers]\n",
+        "\n",
+        "print('Number of layers', len(layers))\n",
+        "print('Total number of feature channels:', sum(feature_nums))\n",
+        "\n",
+        "for layer in layers:\n",
+        "  print('Layer:', layer)"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "SGgDuDo6xZnA"
+      },
+      "source": [
+        "For example try deepdreaming with the layer '`mixed4a_3x3_pre_relu`'"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "pE2QvGorxU5H"
+      },
+      "source": [
+        "layer = \"mixed5b_pool_reduce_pre_relu\"\n",
+        "final = render_deepdream(tf.square(T(layer)), img1)"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "1uOiMyvpx_KC"
+      },
+      "source": [
+        "We can also use TensorBoard to visualize the full graph to understand better how these different layers relate to each other. Most of the code in the next section just makes the graph look a little bit cleaner."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "KA5YzXcEtOi6"
+      },
+      "source": [
+        "\n",
+        "# Helper functions for TF Graph visualization\n",
+        "from IPython.display import  HTML\n",
+        "def strip_consts(graph_def, max_const_size=32):\n",
+        "    \"\"\"Strip large constant values from graph_def.\"\"\"\n",
+        "    strip_def = tf.compat.v1.GraphDef()\n",
+        "    for n0 in graph_def.node:\n",
+        "        n = strip_def.node.add()\n",
+        "        n.MergeFrom(n0)\n",
+        "        if n.op == 'Const':\n",
+        "            tensor = n.attr['value'].tensor\n",
+        "            size = len(tensor.tensor_content)\n",
+        "            if size > max_const_size:\n",
+        "                tensor.tensor_content = tf.compat.as_bytes(\"<stripped %d bytes>\"%size)\n",
+        "    return strip_def\n",
+        "\n",
+        "def rename_nodes(graph_def, rename_func):\n",
+        "    res_def = tf.compat.v1.GraphDef()\n",
+        "    for n0 in graph_def.node:\n",
+        "        n = res_def.node.add()\n",
+        "        n.MergeFrom(n0)\n",
+        "        n.name = rename_func(n.name)\n",
+        "        for i, s in enumerate(n.input):\n",
+        "            n.input[i] = rename_func(s) if s[0]!='^' else '^'+rename_func(s[1:])\n",
+        "    return res_def\n",
+        "\n",
+        "def show_graph(graph_def, max_const_size=32):\n",
+        "    \"\"\"Visualize TensorFlow graph.\"\"\"\n",
+        "    if hasattr(graph_def, 'as_graph_def'):\n",
+        "        graph_def = graph_def.as_graph_def()\n",
+        "    strip_def = strip_consts(graph_def, max_const_size=max_const_size)\n",
+        "    code = \"\"\"\n",
+        "        <script>\n",
+        "          function load() {{\n",
+        "            document.getElementById(\"{id}\").pbtxt = {data};\n",
+        "          }}\n",
+        "        </script>\n",
+        "        <link rel=\"import\" href=\"https://tensorboard.appspot.com/tf-graph-basic.build.html\" onload=load()>\n",
+        "        <div style=\"height:600px\">\n",
+        "          <tf-graph-basic id=\"{id}\"></tf-graph-basic>\n",
+        "        </div>\n",
+        "    \"\"\".format(data=repr(str(strip_def)), id='graph'+str(np.random.rand()))\n",
+        "\n",
+        "    iframe = \"\"\"\n",
+        "        <iframe seamless style=\"width:800px;height:620px;border:0\" srcdoc=\"{}\"></iframe>\n",
+        "    \"\"\".format(code.replace('\"', '&quot;'))\n",
+        "    display(HTML(iframe))\n",
+        "tmp_def = rename_nodes(graph_def, lambda s:\"/\".join(s.split('_',1)))\n",
+        "tmp_def"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "jLRqHaTEUOzm"
+      },
+      "source": [
+        "\n",
+        "# Visualizing the network graph. Be sure expand the \"mixed\" nodes to see their\n",
+        "# internal structure. We are going to visualize \"Conv2D\" nodes.\n",
+        "show_graph(graph_def)"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "3QxnK1mLKF-y"
+      },
+      "source": [],
+      "execution_count": null,
+      "outputs": []
+    }
+  ]
+}
