@@ -1,3 +1,6 @@
+The old one is this:<img width="581" height="432" alt="image" src="https://github.com/user-attachments/assets/420fa13e-6679-4c47-ac7c-6873bf4fac08" />
+
+
 Here is the new image I made.
 <img width="629" height="470" alt="download" src="https://github.com/user-attachments/assets/2804c2e7-cfec-48c4-9e0f-ec38aaa54c21" />
 I improved it because the orignial one left too many empty space in the botttom part of the figure. Also, the yellow bar was coverd by the black one. I think by shifting the y range of the figure
